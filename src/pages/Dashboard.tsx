@@ -1,7 +1,8 @@
+import { useMemo } from "react";
 import { Package, Boxes, AlertTriangle, TrendingUp, ArrowDownToLine, ArrowUpFromLine } from "lucide-react";
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import StatCard from "@/components/dashboard/StatCard";
-import { dashboardStats, monthlySalesData, stockInData, topSellingItems, categoryDistribution } from "@/data/mockData";
+import { useInventory } from "@/store/inventoryStore";
 import { formatRupiah, formatNumber } from "@/lib/format";
 
 const CHART_COLORS = [
@@ -27,6 +28,40 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function Dashboard() {
+  const { items, transactions } = useInventory();
+
+  const stats = useMemo(() => {
+    const sales = transactions.filter((t) => t.type === "sale");
+    const incoming = transactions.filter((t) => t.type === "in");
+    const outgoing = transactions.filter((t) => t.type === "out");
+    return {
+      totalItems: items.length,
+      totalStock: items.reduce((a, i) => a + i.stock, 0),
+      lowStockItems: items.filter((i) => i.status === "low" || i.status === "out").length,
+      monthlySales: sales.reduce((a, t) => a + (t.totalAmount || 0), 0),
+      monthlyIncoming: incoming.reduce((a, t) => a + (t.totalCost || 0), 0),
+      monthlyOutgoing: outgoing.reduce((a, t) => a + t.quantity, 0),
+    };
+  }, [items, transactions]);
+
+  const salesByDate = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.filter((t) => t.type === "sale").forEach((t) => { map[t.date] = (map[t.date] || 0) + (t.totalAmount || 0); });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b)).map(([date, amount]) => ({ date: date.slice(5), amount }));
+  }, [transactions]);
+
+  const topSelling = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.filter((t) => t.type === "sale").forEach((t) => { map[t.itemName] = (map[t.itemName] || 0) + t.quantity; });
+    return Object.entries(map).sort(([, a], [, b]) => b - a).slice(0, 5).map(([name, quantity]) => ({ name, quantity }));
+  }, [transactions]);
+
+  const categoryDist = useMemo(() => {
+    const map: Record<string, number> = {};
+    items.forEach((i) => { map[i.category] = (map[i.category] || 0) + 1; });
+    return Object.entries(map).map(([name, value], i) => ({ name, value, fill: CHART_COLORS[i % CHART_COLORS.length] }));
+  }, [items]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -34,23 +69,20 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground">Ringkasan inventaris dan penjualan</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Total Barang" value={formatNumber(dashboardStats.totalItems)} icon={Package} variant="primary" />
-        <StatCard title="Total Stok" value={formatNumber(dashboardStats.totalStock)} icon={Boxes} />
-        <StatCard title="Hampir Habis" value={formatNumber(dashboardStats.lowStockItems)} icon={AlertTriangle} variant="warning" />
-        <StatCard title="Penjualan Bulan Ini" value={formatRupiah(dashboardStats.monthlySales)} icon={TrendingUp} trend="+12% dari bulan lalu" trendUp />
-        <StatCard title="Barang Masuk" value={formatRupiah(dashboardStats.monthlyIncoming)} icon={ArrowDownToLine} />
-        <StatCard title="Barang Keluar" value={formatNumber(dashboardStats.monthlyOutgoing) + " unit"} icon={ArrowUpFromLine} variant="destructive" />
+        <StatCard title="Total Barang" value={formatNumber(stats.totalItems)} icon={Package} variant="primary" />
+        <StatCard title="Total Stok" value={formatNumber(stats.totalStock)} icon={Boxes} />
+        <StatCard title="Hampir Habis" value={formatNumber(stats.lowStockItems)} icon={AlertTriangle} variant="warning" />
+        <StatCard title="Penjualan" value={formatRupiah(stats.monthlySales)} icon={TrendingUp} />
+        <StatCard title="Barang Masuk" value={formatRupiah(stats.monthlyIncoming)} icon={ArrowDownToLine} />
+        <StatCard title="Barang Keluar" value={formatNumber(stats.monthlyOutgoing) + " unit"} icon={ArrowUpFromLine} variant="destructive" />
       </div>
 
-      {/* Charts Row 1 */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Sales Line Chart */}
         <div className="glass-card p-5">
-          <h3 className="mb-4 text-sm font-semibold">Grafik Penjualan Februari</h3>
+          <h3 className="mb-4 text-sm font-semibold">Grafik Penjualan</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={monthlySalesData}>
+            <LineChart data={salesByDate}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 16%)" />
               <XAxis dataKey="date" tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} />
               <YAxis tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} tickFormatter={(v) => `${(v / 1000000).toFixed(0)}jt`} />
@@ -60,28 +92,10 @@ export default function Dashboard() {
           </ResponsiveContainer>
         </div>
 
-        {/* Stock In Bar Chart */}
         <div className="glass-card p-5">
-          <h3 className="mb-4 text-sm font-semibold">Pemasukan Stok Bulanan</h3>
+          <h3 className="mb-4 text-sm font-semibold">Barang Paling Laris</h3>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stockInData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 16%)" />
-              <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} />
-              <YAxis tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="quantity" fill="hsl(199, 89%, 48%)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Charts Row 2 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Top Selling */}
-        <div className="glass-card p-5">
-          <h3 className="mb-4 text-sm font-semibold">5 Barang Paling Laris</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={topSellingItems} layout="vertical">
+            <BarChart data={topSelling} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 30%, 16%)" />
               <XAxis type="number" tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} />
               <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11, fill: "hsl(215, 20%, 55%)" }} />
@@ -90,30 +104,18 @@ export default function Dashboard() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
 
-        {/* Category Pie */}
-        <div className="glass-card p-5">
-          <h3 className="mb-4 text-sm font-semibold">Distribusi Kategori</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <PieChart>
-              <Pie
-                data={categoryDistribution}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={3}
-                dataKey="value"
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-              >
-                {categoryDistribution.map((_, i) => (
-                  <Cell key={i} fill={CHART_COLORS[i]} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="glass-card p-5">
+        <h3 className="mb-4 text-sm font-semibold">Distribusi Kategori</h3>
+        <ResponsiveContainer width="100%" height={260}>
+          <PieChart>
+            <Pie data={categoryDist} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+              {categoryDist.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+          </PieChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

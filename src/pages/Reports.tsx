@@ -1,16 +1,18 @@
 import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { formatRupiah } from "@/lib/format";
-import { transactions } from "@/data/mockData";
+import { useInventory } from "@/store/inventoryStore";
 import { useMemo } from "react";
 
 export default function Reports() {
+  const { transactions } = useInventory();
+
   const summary = useMemo(() => {
     const sales = transactions.filter((t) => t.type === "sale");
     const incoming = transactions.filter((t) => t.type === "in");
     const totalSales = sales.reduce((a, t) => a + (t.totalAmount || 0), 0);
     const totalCost = incoming.reduce((a, t) => a + (t.totalCost || 0), 0);
     return { totalSales, totalCost, profit: totalSales - totalCost };
-  }, []);
+  }, [transactions]);
 
   const comparisonData = [
     { name: "Pemasukan", value: summary.totalCost },
