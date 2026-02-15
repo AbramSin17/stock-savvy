@@ -11,6 +11,7 @@ import OutgoingGoods from "@/pages/OutgoingGoods";
 import Sales from "@/pages/Sales";
 import Reports from "@/pages/Reports";
 import NotFound from "./pages/NotFound";
+import { InventoryProvider } from "@/store/inventoryStore";
 
 const queryClient = new QueryClient();
 
@@ -20,6 +21,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <InventoryProvider>
         <AppLayout>
           <Routes>
             <Route path="/" element={<Dashboard />} />
@@ -31,6 +33,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AppLayout>
+        </InventoryProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
